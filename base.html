@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>{% block title %}Catálogo de Filmes{% endblock %} | CineLista</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('index') }}" aria-label="CineLista, página inicial">
+        <span class="brand-mark">▶</span><span>Cine<span class="brand-accent">Lista</span></span>
+      </a>
+      <nav aria-label="Navegação principal">
+        <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">Catálogo</a>
+        <a class="button button-small" href="{{ url_for('novo_filme') }}"><span aria-hidden="true">＋</span> Novo filme</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% if mensagens %}
+        <div class="flash-stack" role="status" aria-live="polite">
+          {% for categoria, mensagem in mensagens %}
+            <div class="flash flash-{{ categoria }}"><span>{{ '✓' if categoria == 'sucesso' else '!' }}</span>{{ mensagem }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span class="footer-logo">▶ CineLista</span>
+    <span>Um lugar para organizar seus filmes favoritos.</span>
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

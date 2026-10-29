@@ -1,0 +1,5 @@
+{% extends 'base.html' %}
+{% block title %}Página não encontrada{% endblock %}
+{% block content %}
+<section class="empty-state not-found"><div class="empty-icon">?</div><h1>Filme não encontrado</h1><p>Esse filme pode ter sido removido ou o endereço está incorreto.</p><a class="button" href="{{ url_for('index') }}">Voltar ao catálogo</a></section>
+{% endblock %}

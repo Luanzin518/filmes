@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Catálogo{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <div class="eyebrow"><span class="eyebrow-dot"></span> SUA COLEÇÃO, DO SEU JEITO</div>
+    <h1>Todo filme tem<br>uma <span class="gradient-text">história.</span></h1>
+    <p>Organize os filmes que você ama, registre suas notas e mantenha sua próxima sessão sempre por perto.</p>
+    <a href="{{ url_for('novo_filme') }}" class="button hero-button">＋ Cadastrar filme <span aria-hidden="true">→</span></a>
+  </div>
+  <div class="hero-art" aria-hidden="true">
+    <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+    <div class="poster poster-back"><span>DRAMA</span><strong>THE<br>STORY</strong><small>EVERY FRAME MATTERS</small></div>
+    <div class="poster poster-front"><div class="poster-sun"></div><span>YOUR NEXT</span><strong>FAVOURITE<br>FILM</strong><small>NOW SHOWING IN YOUR LIST</small></div>
+    <div class="floating-chip chip-rating">★ <b>10/10</b></div>
+    <div class="floating-chip chip-play">▶ <b>PLAY</b></div>
+  </div>
+</section>
+
+<section class="catalog-section">
+  <div class="section-heading">
+    <div><div class="eyebrow">BIBLIOTECA PESSOAL</div><h2>Seu catálogo</h2></div>
+    <span class="count-pill">{{ filmes|length }} {% if filmes|length == 1 %}filme{% else %}filmes{% endif %}</span>
+  </div>
+
+  {% if filmes %}
+    <div class="movie-grid">
+      {% for filme in filmes %}
+        <article class="movie-card">
+          <div class="movie-art art-{{ loop.index0 % 6 }}">
+            <span class="art-index">{{ '%02d'|format(loop.index) }}</span>
+            <span class="art-play" aria-hidden="true">▶</span>
+            <span class="art-label">CINELISTA COLLECTION</span>
+            <div class="rating-badge">★ {{ '%.1f'|format(filme['nota']) }}</div>
+          </div>
+          <div class="movie-info">
+            <div class="movie-meta"><span>{{ filme['genero'] }}</span><span>{{ filme['ano'] }}</span></div>
+            <h3>{{ filme['titulo'] }}</h3>
+            <div class="movie-actions">
+              <a class="action-link" href="{{ url_for('editar_filme', filme_id=filme['id']) }}"><span aria-hidden="true">✎</span> Editar</a>
+              <form action="{{ url_for('excluir_filme', filme_id=filme['id']) }}" method="post" onsubmit="return confirm('Tem certeza de que deseja excluir este filme?');">
+                <button class="action-link delete-link" type="submit"><span aria-hidden="true">⌫</span> Excluir</button>
+              </form>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">▧</div>
+      <h3>Seu catálogo começa aqui</h3>
+      <p>Você ainda não cadastrou nenhum filme. Adicione o primeiro para montar sua coleção.</p>
+      <a href="{{ url_for('novo_filme') }}" class="button">＋ Adicionar primeiro filme</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% set editando = modo == 'editar' %}
+{% block title %}{{ 'Editar filme' if editando else 'Novo filme' }}{% endblock %}
+{% block content %}
+<section class="form-page">
+  <a href="{{ url_for('index') }}" class="back-link">← Voltar ao catálogo</a>
+  <div class="form-layout">
+    <div class="form-intro">
+      <div class="eyebrow"><span class="eyebrow-dot"></span> {{ 'ATUALIZE SUA COLEÇÃO' if editando else 'ADICIONE À SUA COLEÇÃO' }}</div>
+      <h1>{{ 'Editar' if editando else 'Novo' }}<br><span class="gradient-text">filme.</span></h1>
+      <p>{{ 'Ajuste as informações e mantenha seu catálogo atualizado.' if editando else 'Preencha os detalhes, dê sua nota e guarde mais uma história na sua biblioteca.' }}</p>
+      <div class="form-tip"><span>✦</span><div><b>Dica cinéfila</b><br><small>Sua nota é pessoal. Avalie de 1 a 10 conforme sua experiência.</small></div></div>
+    </div>
+    <div class="form-panel">
+      <div class="panel-heading"><span class="panel-icon">▶</span><div><h2>Detalhes do filme</h2><p>Os campos abaixo são obrigatórios.</p></div></div>
+      <form method="post" class="movie-form">
+        <div class="field-group">
+          <label for="titulo">Título do filme</label>
+          <input id="titulo" name="titulo" type="text" maxlength="120" placeholder="Ex.: O Senhor dos Anéis" value="{{ filme['titulo'] if filme else '' }}" required autofocus>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label for="genero">Gênero</label>
+            {% set genero_atual = filme['genero'] if filme else '' %}
+            <select id="genero" name="genero" required>
+              <option value="" disabled {% if not genero_atual %}selected{% endif %}>Selecione</option>
+              {% for genero in ['Ação', 'Animação', 'Aventura', 'Comédia', 'Documentário', 'Drama', 'Fantasia', 'Ficção científica', 'Romance', 'Suspense', 'Terror', 'Outro'] %}
+                <option value="{{ genero }}" {% if genero_atual == genero %}selected{% endif %}>{{ genero }}</option>
+              {% endfor %}
+              {% if genero_atual and genero_atual not in ['Ação', 'Animação', 'Aventura', 'Comédia', 'Documentário', 'Drama', 'Fantasia', 'Ficção científica', 'Romance', 'Suspense', 'Terror', 'Outro'] %}
+                <option value="{{ genero_atual }}" selected>{{ genero_atual }}</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="ano">Ano de lançamento</label>
+            <input id="ano" name="ano" type="number" min="1888" max="{{ current_year + 10 }}" placeholder="2024" value="{{ filme['ano'] if filme else '' }}" required>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="nota">Sua nota <span class="label-note">(de 1 a 10)</span></label>
+          <div class="rating-input-wrap"><span class="rating-star">★</span><input id="nota" name="nota" type="number" min="1" max="10" step="0.1" placeholder="8.5" value="{{ filme['nota'] if filme else '' }}" required><span class="rating-suffix">/ 10</span></div>
+          <small class="field-help">Você pode usar casas decimais, por exemplo: 8,5 ou 8.5.</small>
+        </div>
+        <div class="form-actions">
+          <a class="button button-ghost" href="{{ url_for('index') }}">Cancelar</a>
+          <button class="button" type="submit">{{ 'Salvar alterações' if editando else 'Cadastrar filme' }} <span aria-hidden="true">→</span></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}
