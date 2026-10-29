@@ -3,51 +3,91 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 
-from flask import Flask, abort, flash, g, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    g,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
+
+# ==========================================
+# CONFIGURAÇÃO DO PROJETO
+# ==========================================
 
 BASE_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BASE_DIR / "instance"
-INSTANCE_DIR.mkdir(exist_ok=True)
+INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
 
-# No Render, o SQLite fica no sistema de arquivos temporário por padrão.
-# Para usar um caminho persistente (por exemplo, com um disco do Render),
-# defina a variável de ambiente DATABASE_PATH para o caminho desejado.
-DATABASE_PATH = os.environ.get("DATABASE_PATH", str(INSTANCE_DIR / "catalogo.db"))
+DATABASE_PATH = os.environ.get(
+    "DATABASE_PATH",
+    str(INSTANCE_DIR / "catalogo.db"),
+)
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "troque-esta-chave-antes-de-publicar")
+
+app.config["SECRET_KEY"] = os.environ.get(
+    "SECRET_KEY",
+    "chave-de-desenvolvimento-altere-no-render",
+)
+
 app.config["DATABASE"] = DATABASE_PATH
 
 
+# ==========================================
+# CONEXÃO COM O BANCO DE DADOS
+# ==========================================
+
 def get_db():
-    """Retorna uma conexão SQLite reutilizada durante a requisição atual."""
+    """Obtém uma conexão SQLite para a requisição atual."""
+
     if "db" not in g:
-        g.db = sqlite3.connect(app.config["DATABASE"])
+        caminho_banco = Path(app.config["DATABASE"])
+        caminho_banco.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        g.db = sqlite3.connect(
+            str(caminho_banco),
+            timeout=10,
+        )
+
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON")
+
     return g.db
 
 
 @app.teardown_appcontext
 def close_db(_erro=None):
-    """Fecha a conexão ao terminar o contexto da aplicação/requisição."""
+    """Fecha a conexão ao terminar a requisição."""
+
     db = g.pop("db", None)
+
     if db is not None:
         db.close()
 
 
-@app.context_processor
-def inject_current_year():
-    """Disponibiliza o ano atual para os templates."""
-    return {"current_year": datetime.now().year}
+# ==========================================
+# CRIAÇÃO AUTOMÁTICA DO BANCO
+# ==========================================
 
+def init_db():
+    """Cria o banco e a tabela caso não existam."""
 
-with app.app_context():
-    init_db():
-    """Cria o banco e a tabela automaticamente se ainda não existirem."""
-    database_path = Path(app.config["DATABASE"])
-    database_path.parent.mkdir(parents=True, exist_ok=True)
+    caminho_banco = Path(app.config["DATABASE"])
+    caminho_banco.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    with get_db() as db:
+    db = sqlite3.connect(str(caminho_banco), timeout=10)
+
+    try:
         db.execute(
             """
             CREATE TABLE IF NOT EXISTS filmes (
@@ -55,127 +95,287 @@ with app.app_context():
                 titulo TEXT NOT NULL,
                 genero TEXT NOT NULL,
                 ano INTEGER NOT NULL,
-                nota REAL NOT NULL CHECK (nota >= 1 AND nota <= 10),
-                criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                nota REAL NOT NULL
+                    CHECK (nota >= 1 AND nota <= 10),
+                criado_em TEXT NOT NULL
+                    DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
 
+        db.commit()
 
-# A criação também acontece quando o Gunicorn importa o módulo no deploy.
+    finally:
+        db.close()
+
+
+# Inicializa o banco ao carregar o aplicativo.
+# Funciona tanto localmente quanto no Render.
 init_db()
 
 
+# ==========================================
+# VARIÁVEIS DISPONÍVEIS NOS TEMPLATES
+# ==========================================
+
+@app.context_processor
+def inject_current_year():
+    """Disponibiliza o ano atual para os templates."""
+
+    return {
+        "current_year": datetime.now().year
+    }
+
+
+# ==========================================
+# VALIDAÇÃO DOS DADOS DOS FILMES
+# ==========================================
+
 def validar_filme(formulario):
-    """Valida os campos do formulário e devolve os dados ou uma mensagem."""
+    """Valida os dados recebidos do formulário."""
+
     titulo = formulario.get("titulo", "").strip()
     genero = formulario.get("genero", "").strip()
     ano_texto = formulario.get("ano", "").strip()
-    nota_texto = formulario.get("nota", "").strip().replace(",", ".")
+
+    nota_texto = (
+        formulario.get("nota", "")
+        .strip()
+        .replace(",", ".")
+    )
 
     if not titulo or not genero or not ano_texto or not nota_texto:
         return None, "Preencha todos os campos."
+
     if len(titulo) > 120:
         return None, "O título deve ter no máximo 120 caracteres."
+
     if len(genero) > 60:
         return None, "O gênero deve ter no máximo 60 caracteres."
 
     try:
         ano = int(ano_texto)
-    except ValueError:
+
+    except (TypeError, ValueError):
         return None, "Informe um ano válido."
 
     ano_atual = datetime.now().year
+
     if ano < 1888 or ano > ano_atual + 10:
-        return None, f"O ano deve estar entre 1888 e {ano_atual + 10}."
+        return None, (
+            f"O ano deve estar entre 1888 e {ano_atual + 10}."
+        )
 
     try:
         nota = float(nota_texto)
-    except ValueError:
+
+    except (TypeError, ValueError):
         return None, "A nota deve ser um número entre 1 e 10."
 
     if not 1 <= nota <= 10:
         return None, "A nota deve estar entre 1 e 10."
 
-    return {"titulo": titulo, "genero": genero, "ano": ano, "nota": nota}, None
+    filme = {
+        "titulo": titulo,
+        "genero": genero,
+        "ano": ano,
+        "nota": nota,
+    }
 
+    return filme, None
+
+
+# ==========================================
+# READ — LISTAR FILMES
+# ==========================================
 
 @app.route("/")
 def index():
-    """READ: lista todos os filmes cadastrados."""
+    """Exibe todos os filmes cadastrados."""
+
     with get_db() as db:
         filmes = db.execute(
-            "SELECT id, titulo, genero, ano, nota FROM filmes ORDER BY titulo COLLATE NOCASE"
+            """
+            SELECT id, titulo, genero, ano, nota
+            FROM filmes
+            ORDER BY titulo COLLATE NOCASE
+            """
         ).fetchall()
-    return render_template("index.html", filmes=filmes)
 
+    return render_template(
+        "index.html",
+        filmes=filmes,
+    )
+
+
+# ==========================================
+# CREATE — CADASTRAR FILME
+# ==========================================
 
 @app.route("/filmes/novo", methods=["GET", "POST"])
 def novo_filme():
-    """CREATE: exibe o formulário e salva um novo filme."""
+    """Exibe o formulário e cadastra um filme."""
+
     if request.method == "POST":
         filme, erro = validar_filme(request.form)
+
         if erro:
             flash(erro, "erro")
-            return render_template("form.html", filme=request.form, modo="novo"), 400
+
+            return render_template(
+                "form.html",
+                filme=request.form,
+                modo="novo",
+            ), 400
 
         with get_db() as db:
             db.execute(
-                "INSERT INTO filmes (titulo, genero, ano, nota) VALUES (?, ?, ?, ?)",
-                (filme["titulo"], filme["genero"], filme["ano"], filme["nota"]),
+                """
+                INSERT INTO filmes (
+                    titulo,
+                    genero,
+                    ano,
+                    nota
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    filme["titulo"],
+                    filme["genero"],
+                    filme["ano"],
+                    filme["nota"],
+                ),
             )
+
         flash("Filme cadastrado com sucesso!", "sucesso")
+
         return redirect(url_for("index"))
 
-    return render_template("form.html", filme=None, modo="novo")
+    return render_template(
+        "form.html",
+        filme=None,
+        modo="novo",
+    )
 
 
-@app.route("/filmes/<int:filme_id>/editar", methods=["GET", "POST"])
+# ==========================================
+# UPDATE — EDITAR FILME
+# ==========================================
+
+@app.route(
+    "/filmes/<int:filme_id>/editar",
+    methods=["GET", "POST"],
+)
 def editar_filme(filme_id):
-    """UPDATE: edita os dados de um filme existente."""
+    """Edita um filme existente."""
+
     with get_db() as db:
-        filme_atual = db.execute("SELECT * FROM filmes WHERE id = ?", (filme_id,)).fetchone()
+        filme_atual = db.execute(
+            "SELECT * FROM filmes WHERE id = ?",
+            (filme_id,),
+        ).fetchone()
 
     if filme_atual is None:
         abort(404)
 
     if request.method == "POST":
         filme, erro = validar_filme(request.form)
+
         if erro:
             flash(erro, "erro")
+
             dados = dict(request.form)
             dados["id"] = filme_id
-            return render_template("form.html", filme=dados, modo="editar"), 400
+
+            return render_template(
+                "form.html",
+                filme=dados,
+                modo="editar",
+            ), 400
 
         with get_db() as db:
             db.execute(
-                "UPDATE filmes SET titulo = ?, genero = ?, ano = ?, nota = ? WHERE id = ?",
-                (filme["titulo"], filme["genero"], filme["ano"], filme["nota"], filme_id),
+                """
+                UPDATE filmes
+                SET titulo = ?,
+                    genero = ?,
+                    ano = ?,
+                    nota = ?
+                WHERE id = ?
+                """,
+                (
+                    filme["titulo"],
+                    filme["genero"],
+                    filme["ano"],
+                    filme["nota"],
+                    filme_id,
+                ),
             )
+
         flash("Filme atualizado com sucesso!", "sucesso")
+
         return redirect(url_for("index"))
 
-    return render_template("form.html", filme=filme_atual, modo="editar")
+    return render_template(
+        "form.html",
+        filme=filme_atual,
+        modo="editar",
+    )
 
 
-@app.route("/filmes/<int:filme_id>/excluir", methods=["POST"])
+# ==========================================
+# DELETE — EXCLUIR FILME
+# ==========================================
+
+@app.route(
+    "/filmes/<int:filme_id>/excluir",
+    methods=["POST"],
+)
 def excluir_filme(filme_id):
-    """DELETE: remove um filme. A exclusão só é aceita via POST."""
+    """Exclui um filme pelo seu identificador."""
+
     with get_db() as db:
-        cursor = db.execute("DELETE FROM filmes WHERE id = ?", (filme_id,))
+        cursor = db.execute(
+            "DELETE FROM filmes WHERE id = ?",
+            (filme_id,),
+        )
+
         apagado = cursor.rowcount
 
-    if not apagado:
+    if apagado == 0:
         abort(404)
 
     flash("Filme excluído com sucesso.", "sucesso")
+
     return redirect(url_for("index"))
 
 
+# ==========================================
+# PÁGINA NÃO ENCONTRADA
+# ==========================================
+
 @app.errorhandler(404)
 def pagina_nao_encontrada(_erro):
-    return render_template("404.html"), 404
+    """Trata páginas ou filmes que não existem."""
 
+    caminho_template = BASE_DIR / "templates" / "404.html"
+
+    if caminho_template.exists():
+        return render_template("404.html"), 404
+
+    return "Página não encontrada.", 404
+
+
+# ==========================================
+# EXECUÇÃO LOCAL
+# ==========================================
 
 if __name__ == "__main__":
-    app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
+    porta = int(os.environ.get("PORT", "5000"))
+    modo_debug = os.environ.get("FLASK_DEBUG") == "1"
+
+    app.run(
+        host="0.0.0.0",
+        port=porta,
+        debug=modo_debug,
+    )
