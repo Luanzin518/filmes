@@ -41,7 +41,8 @@ def inject_current_year():
     return {"current_year": datetime.now().year}
 
 
-def init_db():
+with app.app_context():
+    init_db():
     """Cria o banco e a tabela automaticamente se ainda não existirem."""
     database_path = Path(app.config["DATABASE"])
     database_path.parent.mkdir(parents=True, exist_ok=True)
